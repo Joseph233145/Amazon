@@ -8,7 +8,7 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Phosphor Icons (Alternative to Lucide) -->
+    <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <!-- Custom Config for Tailwind -->
@@ -37,17 +37,11 @@
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
-        /* Hide scrollbar for chrome/safari/opera */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
-        }
-        .toast {
-            animation: slideUp 0.3s ease-out;
-        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Toast Animation */
+        .toast { animation: slideUp 0.3s ease-out; }
         @keyframes slideUp {
             from { transform: translate(-50%, 100%); opacity: 0; }
             to { transform: translate(-50%, 0); opacity: 1; }
@@ -56,13 +50,16 @@
 </head>
 <body class="flex flex-col min-h-screen">
 
+    <!-- Global Error Banner (For critical config errors) -->
+    <div id="error-banner" class="hidden bg-red-600 text-white text-center p-4 font-bold sticky top-0 z-[100]"></div>
+
     <!-- App Container -->
     <div id="app" class="flex flex-col min-h-screen">
-        <!-- Content will be injected here by JS -->
+        <!-- Content injected by JS -->
     </div>
 
     <!-- Toast Container -->
-    <div id="toast-container" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50"></div>
+    <div id="toast-container" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-sm flex flex-col items-center gap-2"></div>
 
     <!-- Firebase SDKs -->
     <script type="module">
@@ -70,12 +67,12 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- GLOBAL VARIABLES & STATE ---
+        // --- GLOBAL STATE ---
         const state = {
             user: null,
             products: [],
             cart: [],
-            view: 'home', // home, product, cart, checkout, orders, admin
+            view: 'home', 
             selectedProduct: null,
             searchQuery: '',
             loading: true,
@@ -83,7 +80,7 @@
         };
 
         // --- FIREBASE CONFIG ---
-        // Mawa, nee keys ikkada update chesanu.
+        // MAWA: Replace these with your REAL keys from Firebase Console if downloading.
         let firebaseConfig = {
           apiKey: "AIzaSyD_tz78KTl2wm2MXYYmyQcGJllVNli8LJM",
           authDomain: "fir-1b60d.firebaseapp.com",
@@ -94,32 +91,58 @@
           measurementId: "G-EJD1G09FT5"
         };
 
-        // Note: This logic helps it run in the current Canvas environment automatically
-        // It keeps working in preview mode using system keys, but uses YOUR keys when downloaded.
+        // Canvas/Preview Environment Logic
         if (typeof window.__firebase_config !== 'undefined') {
             try {
                 firebaseConfig = JSON.parse(window.__firebase_config);
             } catch (e) {
-                console.error("Canvas config parse error", e);
+                console.error("Config parse error", e);
+                showToast("System Error: Invalid Config", "error");
             }
         }
-        
+
+        // Initialize Firebase
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            document.getElementById('error-banner').innerText = "Critical Error: Firebase Configuration Failed. Check Console.";
+            document.getElementById('error-banner').classList.remove('hidden');
+            console.error("Firebase Init Error:", e);
+        }
+
         const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
-        
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
 
         // --- MOCK DATA ---
         const INITIAL_PRODUCTS = [
-            { id: 'p1', title: 'Echo Dot (5th Gen) | Smart speaker with Alexa', price: 49.99, category: 'Electronics', rating: 4.5, reviews: 12500, image: 'https://m.media-amazon.com/images/I/719c1scgMRL._AC_SL1500_.jpg', description: 'Our best sounding Echo Dot yet – Enjoy an improved audio experience compared to any previous Echo Dot with Alexa.' },
+            { id: 'p1', title: 'Echo Dot (5th Gen) | Smart speaker with Alexa', price: 49.99, category: 'Electronics', rating: 4.5, reviews: 12500, image: 'https://m.media-amazon.com/images/I/719c1scgMRL._AC_SL1500_.jpg', description: 'Improved audio experience compared to any previous Echo Dot with Alexa.' },
             { id: 'p2', title: 'Men\'s Cotton Classic Fit Crew Neck T-Shirt', price: 15.99, category: 'Fashion', rating: 4.2, reviews: 850, image: 'https://m.media-amazon.com/images/I/71-3eL2VwLL._AC_UL1500_.jpg', description: 'Soft, breathable cotton. Classic fit for everyday comfort.' },
-            { id: 'p3', title: 'Sony WH-1000XM5 Wireless Noise Cancelling Headphones', price: 348.00, category: 'Electronics', rating: 4.8, reviews: 3400, image: 'https://m.media-amazon.com/images/I/61+ySfXXxFL._AC_SL1500_.jpg', description: 'Industry-leading noise cancellation, crystal clear hands-free calling.' },
-            { id: 'p4', title: 'Atomic Habits: An Easy & Proven Way to Build Good Habits', price: 13.79, category: 'Books', rating: 4.9, reviews: 50000, image: 'https://m.media-amazon.com/images/I/81wgcld4wxL._SL1500_.jpg', description: 'No matter your goals, Atomic Habits offers a proven framework for improving--every day.' }
+            { id: 'p3', title: 'Sony WH-1000XM5 Wireless Noise Cancelling Headphones', price: 348.00, category: 'Electronics', rating: 4.8, reviews: 3400, image: 'https://m.media-amazon.com/images/I/61+ySfXXxFL._AC_SL1500_.jpg', description: 'Industry-leading noise cancellation.' },
+            { id: 'p4', title: 'Atomic Habits: An Easy & Proven Way to Build Good Habits', price: 13.79, category: 'Books', rating: 4.9, reviews: 50000, image: 'https://m.media-amazon.com/images/I/81wgcld4wxL._SL1500_.jpg', description: 'Proven framework for improving--every day.' }
         ];
 
-        // --- AUTH & INITIALIZATION ---
+        // --- AUTH & DATA SYNC ---
         async function initApp() {
+            // Safety Check: If config is dummy, warn user
+            if(firebaseConfig.apiKey === "API_KEY_PETTU_MAWA" && typeof window.__firebase_config === 'undefined') {
+                 showErrorBanner("⚠️ Configuration Missing! Please update firebaseConfig in the code.");
+                 state.loading = false;
+                 render();
+                 return;
+            }
+
+            // Timeout for loading state
+            setTimeout(() => {
+                if (state.loading) {
+                    showToast("Network Slow? Switching to Offline Mode", "error");
+                    state.loading = false;
+                    if(state.products.length === 0) state.products = INITIAL_PRODUCTS;
+                    render();
+                }
+            }, 5000);
+
             try {
                 if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
                     await signInWithCustomToken(auth, window.__initial_auth_token);
@@ -128,66 +151,64 @@
                 }
             } catch (error) {
                 console.error("Auth Error:", error);
+                showToast(`Authentication Failed: ${error.message}`, "error");
             }
 
             onAuthStateChanged(auth, (user) => {
                 state.user = user;
-                if (user) {
+                if(user) {
+                    showToast("Signed in successfully");
                     syncData();
                 } else {
-                    render();
+                    // If auth fails or user signs out
+                    render(); 
                 }
             });
         }
 
         function syncData() {
-            // 1. Sync Products (Public)
-            // Note: Since this is now using your personal project, make sure to create the 'products' collection 
-            // or allow the code to create it (requires open Firestore rules initially).
+            // 1. Sync Products
             const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
             onSnapshot(productsRef, (snapshot) => {
                 const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 state.products = items;
-                state.loading = false;
                 
-                // Seed if empty and no items found
                 if (items.length === 0) {
+                    state.products = INITIAL_PRODUCTS;
+                    // Try seed
                     INITIAL_PRODUCTS.forEach(async (p) => {
-                        // We use setDoc to ensure IDs match
-                        try {
-                            await setDoc(doc(productsRef, p.id), p);
-                        } catch(e) {
-                            console.log("Auto-seed failed (likely permission issue), using local mock data");
-                        }
+                        try { await setDoc(doc(productsRef, p.id), p); } catch(e) {}
                     });
-                    // Show mock data immediately if DB write fails
-                    if(state.products.length === 0) state.products = INITIAL_PRODUCTS;
                 }
+                state.loading = false;
                 render();
             }, (error) => {
-                console.error("Error fetching products:", error);
-                // Fallback to local data if Firestore fails (e.g. permission denied)
+                console.error("Product Sync Error:", error);
+                showToast(`Failed to load products: ${error.message}`, "error");
                 state.products = INITIAL_PRODUCTS;
                 state.loading = false;
                 render();
             });
 
-            // 2. Sync Cart (Private)
+            // 2. Sync Cart
             if (state.user) {
                 const cartRef = collection(db, 'artifacts', appId, 'users', state.user.uid, 'cart');
                 onSnapshot(cartRef, (snapshot) => {
                     state.cart = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     render();
-                }, (error) => console.log("Cart sync error", error));
+                }, (error) => {
+                    console.error("Cart Sync Error:", error);
+                    showToast("Failed to sync cart", "error");
+                });
             }
         }
 
-        // --- ACTIONS ---
+        // --- ACTIONS (WITH COMPULSORY AUTH CHECKS) ---
 
         window.setView = (viewName, productId = null) => {
             state.view = viewName;
-            state.showSuggestions = false; // Hide suggestions on view change
-            state.searchQuery = ''; // Clear search on nav? Optional.
+            state.showSuggestions = false;
+            state.searchQuery = '';
             if (productId) {
                 state.selectedProduct = state.products.find(p => p.id === productId);
             }
@@ -199,9 +220,7 @@
             state.searchQuery = value;
             state.showSuggestions = true;
             if(state.view !== 'home' && value.length > 0) state.view = 'home';
-            render(); // Re-render to show suggestions/filter grid
-            
-            // Keep focus on input
+            render(); 
             setTimeout(() => {
                 const input = document.getElementById('searchInput');
                 if(input) {
@@ -223,7 +242,12 @@
         };
 
         window.addToCart = async (productId) => {
-            if (!state.user) return alert("Please login first");
+            // STRICT AUTH CHECK
+            if (!state.user) {
+                showToast("🔒 Login Required to Add to Cart", "error");
+                return;
+            }
+
             const product = state.products.find(p => p.id === productId);
             if (!product) return;
 
@@ -242,25 +266,41 @@
                         quantity: 1
                     });
                 }
-                showToast("Added to Cart");
+                showToast("✅ Added to Cart");
             } catch (e) {
                 console.error(e);
-                showToast("Error adding to cart", "error");
+                showToast(`Error: ${e.message}`, "error");
             }
         };
 
         window.updateQty = async (itemId, newQty) => {
+            if (!state.user) return;
             if (newQty < 1) return;
-            const ref = doc(db, 'artifacts', appId, 'users', state.user.uid, 'cart', itemId);
-            await updateDoc(ref, { quantity: newQty });
+            try {
+                const ref = doc(db, 'artifacts', appId, 'users', state.user.uid, 'cart', itemId);
+                await updateDoc(ref, { quantity: newQty });
+            } catch (e) {
+                showToast("Failed to update quantity", "error");
+            }
         };
 
         window.removeFromCart = async (itemId) => {
-            const ref = doc(db, 'artifacts', appId, 'users', state.user.uid, 'cart', itemId);
-            await deleteDoc(ref);
+            if (!state.user) return;
+            try {
+                const ref = doc(db, 'artifacts', appId, 'users', state.user.uid, 'cart', itemId);
+                await deleteDoc(ref);
+            } catch (e) {
+                showToast("Failed to remove item", "error");
+            }
         };
 
         window.placeOrder = async () => {
+            // STRICT AUTH CHECK
+            if (!state.user) {
+                showToast("🔒 Login Required to Checkout", "error");
+                return;
+            }
+
             const btn = document.getElementById('checkoutBtn');
             btn.innerHTML = "Processing...";
             btn.disabled = true;
@@ -277,14 +317,15 @@
                     });
                     
                     // Clear cart
-                    state.cart.forEach(async (item) => {
-                        await deleteDoc(doc(db, 'artifacts', appId, 'users', state.user.uid, 'cart', item.id));
-                    });
+                    const deletePromises = state.cart.map(item => 
+                        deleteDoc(doc(db, 'artifacts', appId, 'users', state.user.uid, 'cart', item.id))
+                    );
+                    await Promise.all(deletePromises);
 
-                    showToast("Order Placed Successfully!");
+                    showToast("🎉 Order Placed Successfully!");
                     window.setView('orders');
                 } catch(e) {
-                    showToast("Order Failed", "error");
+                    showToast(`Order Failed: ${e.message}`, "error");
                     btn.innerHTML = "Place Order";
                     btn.disabled = false;
                 }
@@ -293,14 +334,21 @@
 
         // Admin Actions
         window.deleteProduct = async (id) => {
+            if(!state.user) return showToast("Admin Access Required", "error");
             if(confirm("Delete product?")) {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
-                showToast("Product Deleted");
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
+                    showToast("Product Deleted");
+                } catch (e) {
+                    showToast(`Delete Failed: ${e.message}`, "error");
+                }
             }
         };
 
         window.saveProduct = async (event) => {
             event.preventDefault();
+            if(!state.user) return showToast("Admin Access Required", "error");
+
             const form = event.target;
             const data = {
                 title: form.title.value,
@@ -312,9 +360,13 @@
                 reviews: 0
             };
 
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), data);
-            showToast("Product Added");
-            form.reset();
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), data);
+                showToast("Product Added Successfully");
+                form.reset();
+            } catch (e) {
+                showToast(`Add Failed: ${e.message}`, "error");
+            }
         };
 
         // --- UI HELPERS ---
@@ -322,14 +374,27 @@
         function showToast(msg, type = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
-            toast.className = `toast px-6 py-3 rounded shadow-lg text-white font-medium mb-2 ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
-            toast.innerText = msg;
+            
+            // Red for error, Green for success
+            const colorClass = type === 'error' ? 'bg-red-600 border-red-700' : 'bg-green-600 border-green-700';
+            const icon = type === 'error' ? '<i class="ph-bold ph-warning-circle"></i>' : '<i class="ph-bold ph-check-circle"></i>';
+
+            toast.className = `toast px-6 py-3 rounded-md shadow-lg text-white font-medium flex items-center gap-2 border-l-4 ${colorClass}`;
+            toast.innerHTML = `${icon} <span>${msg}</span>`;
+            
             container.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
+            setTimeout(() => toast.remove(), 4000); // 4 seconds
+        }
+
+        function showErrorBanner(msg) {
+            const banner = document.getElementById('error-banner');
+            banner.innerText = msg;
+            banner.classList.remove('hidden');
         }
 
         function formatPrice(usd) {
-            return Math.floor(usd * 83).toLocaleString();
+            // Converts USD to INR approx and returns string with commas
+            return Math.floor(usd * 83).toLocaleString('en-IN');
         }
 
         function renderStars(rating) {
@@ -347,7 +412,6 @@
         function renderHeader() {
             const cartCount = state.cart.reduce((a,c) => a + c.quantity, 0);
             
-            // Search Logic
             let filtered = state.products;
             if(state.searchQuery) {
                 filtered = state.products.filter(p => 
@@ -356,7 +420,6 @@
                 );
             }
 
-            // Suggestions Dropdown
             let suggestionsHTML = '';
             if (state.showSuggestions && state.searchQuery) {
                 suggestionsHTML = `
@@ -372,20 +435,16 @@
 
             return `
             <header class="bg-amazon-dark text-white sticky top-0 z-50">
-                <!-- Top Belt -->
                 <div class="flex items-center p-2 gap-4 max-w-[1500px] mx-auto">
-                    <!-- Logo -->
                     <div onclick="setView('home')" class="cursor-pointer border border-transparent hover:border-white p-1 rounded flex flex-col leading-none">
                         <span class="text-xl font-bold tracking-tighter">amazon<span class="text-amazon-yellow">.in</span></span>
                     </div>
 
-                    <!-- Location -->
                     <div class="hidden md:flex flex-col text-xs border border-transparent hover:border-white p-1 rounded cursor-pointer">
                         <span class="text-gray-300">Deliver to</span>
                         <span class="font-bold">India</span>
                     </div>
 
-                    <!-- Search Bar -->
                     <div class="flex-grow flex h-10 rounded overflow-hidden focus-within:ring-2 focus-within:ring-amazon-yellow relative">
                         <select class="bg-gray-100 text-black text-xs p-2 border-r border-gray-300 w-14 hidden sm:block">
                             <option>All</option>
@@ -405,7 +464,6 @@
                         ${suggestionsHTML}
                     </div>
 
-                    <!-- Nav Links -->
                     <div onclick="setView('orders')" class="hidden sm:flex flex-col text-xs border border-transparent hover:border-white p-1 rounded cursor-pointer">
                         <span class="text-gray-300">Hello, ${state.user ? 'User' : 'Sign in'}</span>
                         <span class="font-bold">Returns & Orders</span>
@@ -416,7 +474,6 @@
                         <span class="font-bold">Dashboard</span>
                     </div>
 
-                    <!-- Cart -->
                     <div onclick="setView('cart')" class="flex items-end cursor-pointer border border-transparent hover:border-white p-1 rounded relative">
                         <i class="ph ph-shopping-cart text-3xl"></i>
                         <span class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1 bg-amazon-yellow text-gray-900 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
@@ -426,7 +483,6 @@
                     </div>
                 </div>
                 
-                <!-- Sub Header -->
                 <div class="bg-amazon-light text-white text-sm p-2 flex items-center gap-4 overflow-x-auto whitespace-nowrap">
                     <div class="flex items-center gap-1 cursor-pointer font-bold">
                         <i class="ph ph-list text-lg"></i> All
@@ -435,8 +491,6 @@
                     <span class="cursor-pointer hover:underline">Amazon miniTV</span>
                     <span class="cursor-pointer hover:underline">Sell</span>
                     <span class="cursor-pointer hover:underline">Best Sellers</span>
-                    <span class="cursor-pointer hover:underline">Mobiles</span>
-                    <span class="cursor-pointer hover:underline">Today's Deals</span>
                     <span class="cursor-pointer hover:underline">Electronics</span>
                 </div>
             </header>
@@ -468,7 +522,6 @@
                     <div class="mb-2">
                         <span class="text-xs align-top">₹</span>
                         <span class="text-xl font-bold">${formatPrice(p.price)}</span>
-                        <span class="text-xs align-top">00</span>
                     </div>
                     <p class="text-xs text-gray-500 mb-2">FREE Delivery by Amazon</p>
                 </div>
@@ -657,11 +710,14 @@
         }
 
         function renderOrders() {
-             // We need to fetch orders first, but for simplicity we rely on a separate fetch or just assume data is synced.
-             // Since we didn't add order sync to global init, we will do a quick fetch here or just show placeholder if complexity grows.
-             // For single file simplicity, let's assume we want to show a simple "Fetch" UI or just listen to orders if user is logged in.
-             // Adding Order Sync to initApp is better. For now, let's just fetch once.
-             
+             if (!state.user) {
+                  return `
+                     <div class="max-w-[1000px] mx-auto p-4 min-h-screen bg-white">
+                        <h1 class="text-2xl font-medium mb-6">Your Orders</h1>
+                        <p>Orders are not saved in offline mode.</p>
+                     </div>`;
+             }
+
              // Quick fetch for display
              getDocs(collection(db, 'artifacts', appId, 'users', state.user.uid, 'orders')).then(snap => {
                  const orders = snap.docs.map(d => ({id:d.id, ...d.data()}));
@@ -765,21 +821,14 @@
             </footer>`;
         }
 
-        // --- MAIN RENDER LOOP ---
         function render() {
             const appDiv = document.getElementById('app');
-            
             if(state.loading) {
                 appDiv.innerHTML = '<div class="h-screen flex items-center justify-center bg-gray-100"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div></div>';
                 return;
             }
-
             let content = '';
-            
-            // Header is always present
             content += renderHeader();
-
-            // Body based on View
             switch(state.view) {
                 case 'home': content += renderHome(); break;
                 case 'product': content += renderProductDetails(); break;
@@ -789,12 +838,10 @@
                 case 'admin': content += renderAdmin(); break;
                 default: content += renderHome();
             }
-
             content += renderFooter();
             appDiv.innerHTML = content;
         }
 
-        // Start
         initApp();
 
     </script>
