@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon.in Clone</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Phosphor Icons (Alternative to Lucide) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Custom Config for Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        amazon: {
+                            dark: '#131921',
+                            light: '#232f3e',
+                            yellow: '#febd69',
+                            orange: '#cd9042',
+                            blue: '#007185'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Arial', sans-serif; background-color: #e3e6e6; }
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        /* Hide scrollbar for chrome/safari/opera */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+        .toast {
+            animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp {
+            from { transform: translate(-50%, 100%); opacity: 0; }
+            to { transform: translate(-50%, 0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+    <!-- App Container -->
+    <div id="app" class="flex flex-col min-h-screen">
+        <!-- Content will be injected here by JS -->
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50"></div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- GLOBAL VARIABLES & STATE ---
+        const state = {
+            user: null,
+            products: [],
+            cart: [],
+            view: 'home', // home, product, cart, checkout, orders, admin
+            selectedProduct: null,
+            searchQuery: '',
+            loading: true,
+            showSuggestions: false
+        };
+
+        // --- FIREBASE CONFIG ---
+        // Note: In this environment, we use global variables provided by the system.
+        // If running locally, replace with your actual Firebase config object.
+        const firebaseConfig = JSON.parse(window.__firebase_config || '{}');
+        const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- MOCK DATA ---
+        const INITIAL_PRODUCTS = [
+            { id: 'p1', title: 'Echo Dot (5th Gen) | Smart speaker with Alexa', price: 49.99, category: 'Electronics', rating: 4.5, reviews: 12500, image: 'https://m.media-amazon.com/images/I/719c1scgMRL._AC_SL1500_.jpg', description: 'Our best sounding Echo Dot yet – Enjoy an improved audio experience compared to any previous Echo Dot with Alexa.' },
+            { id: 'p2', title: 'Men\'s Cotton Classic Fit Crew Neck T-Shirt', price: 15.99, category: 'Fashion', rating: 4.2, reviews: 850, image: 'https://m.media-amazon.com/images/I/71-3eL2VwLL._AC_UL1500_.jpg', description: 'Soft, breathable cotton. Classic fit for everyday comfort.' },
+            { id: 'p3', title: 'Sony WH-1000XM5 Wireless Noise Cancelling Headphones', price: 348.00, category: 'Electronics', rating: 4.8, reviews: 3400, image: 'https://m.media-amazon.com/images/I/61+ySfXXxFL._AC_SL1500_.jpg', description: 'Industry-leading noise cancellation, crystal clear hands-free calling.' },
+            { id: 'p4', title: 'Atomic Habits: An Easy & Proven Way to Build Good Habits', price: 13.79, category: 'Books', rating: 4.9, reviews: 50000, image: 'https://m.media-amazon.com/images/I/81wgcld4wxL._SL1500_.jpg', description: 'No matter your goals, Atomic Habits offers a proven framework for improving--every day.' }
+        ];
+
+        // --- AUTH & INITIALIZATION ---
+        async function initApp() {
+            try {
+                if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+                    await signInWithCustomToken(auth, window.__initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth Error:", error);
+            }
+
+            onAuthStateChanged(auth, (user) => {
+                state.user = user;
+                if (user) {
+                    syncData();
+                } else {
+                    render();
+                }
+            });
+        }
+
+        function syncData() {
+            // 1. Sync Products (Public)
+            const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
+            onSnapshot(productsRef, (snapshot) => {
+                const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                state.products = items;
+                state.loading = false;
+                
+                // Seed if empty
+                if (items.length === 0) {
+                    INITIAL_PRODUCTS.forEach(async (p) => {
+                        await setDoc(doc(productsRef, p.id), p);
+                    });
+                }
+                render();
+            });
+
+            // 2. Sync Cart (Private)
+            if (state.user) {
+                const cartRef = collection(db, 'artifacts', appId, 'users', state.user.uid, 'cart');
+                onSnapshot(cartRef, (snapshot) => {
+                    state.cart = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    render();
+                });
+            }
+        }
+
+        // --- ACTIONS ---
+
+        window.setView = (viewName, productId = null) => {
+            state.view = viewName;
+            state.showSuggestions = false; // Hide suggestions on view change
+            state.searchQuery = ''; // Clear search on nav? Optional.
+            if (productId) {
+                state.selectedProduct = state.products.find(p => p.id === productId);
+            }
+            render();
+            window.scrollTo(0, 0);
+        };
+
+        window.updateSearch = (value) => {
+            state.searchQuery = value;
+            state.showSuggestions = true;
+            if(state.view !== 'home' && value.length > 0) state.view = 'home';
+            render(); // Re-render to show suggestions/filter grid
+            
+            // Keep focus on input
+            setTimeout(() => {
+                const input = document.getElementById('searchInput');
+                if(input) {
+                    input.focus();
+                    input.setSelectionRange(input.value.length, input.value.length);
+                }
+            }, 0);
+        };
+
+        window.selectSuggestion = (productId) => {
+            const product = state.products.find(p => p.id === productId);
+            if(product) {
+                state.selectedProduct = product;
+                state.view = 'product';
+                state.searchQuery = '';
+                state.showSuggestions = false;
+                render();
+            }
+        };
+
+        window.addToCart = async (productId) => {
+            if (!state.user) return alert("Please login first");
+            const product = state.products.find(p => p.id === productId);
+            if (!product) return;
+
+            const existingItem = state.cart.find(item => item.productId === productId);
+            const cartRef = collection(db, 'artifacts', appId, 'users', state.user.uid, 'cart');
+
+            try {
+                if (existingItem) {
+                    await updateDoc(doc(cartRef, existingItem.id), { quantity: existingItem.quantity + 1 });
+                } else {
+                    await addDoc(cartRef, {
+                        productId: product.id,
+                        title: product.title,
+                        price: product.price,
+                        image: product.image,
+                        quantity: 1
+                    });
+                }
+                showToast("Added to Cart");
+            } catch (e) {
+                console.error(e);
+                showToast("Error adding to cart", "error");
+            }
+        };
+
+        window.updateQty = async (itemId, newQty) => {
+            if (newQty < 1) return;
+            const ref = doc(db, 'artifacts', appId, 'users', state.user.uid, 'cart', itemId);
+            await updateDoc(ref, { quantity: newQty });
+        };
+
+        window.removeFromCart = async (itemId) => {
+            const ref = doc(db, 'artifacts', appId, 'users', state.user.uid, 'cart', itemId);
+            await deleteDoc(ref);
+        };
+
+        window.placeOrder = async () => {
+            const btn = document.getElementById('checkoutBtn');
+            btn.innerHTML = "Processing...";
+            btn.disabled = true;
+
+            const total = state.cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+            
+            setTimeout(async () => {
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'users', state.user.uid, 'orders'), {
+                        items: state.cart,
+                        amount: Math.floor(total * 83),
+                        status: 'Processing',
+                        date: new Date().toISOString()
+                    });
+                    
+                    // Clear cart
+                    state.cart.forEach(async (item) => {
+                        await deleteDoc(doc(db, 'artifacts', appId, 'users', state.user.uid, 'cart', item.id));
+                    });
+
+                    showToast("Order Placed Successfully!");
+                    window.setView('orders');
+                } catch(e) {
+                    showToast("Order Failed", "error");
+                    btn.innerHTML = "Place Order";
+                    btn.disabled = false;
+                }
+            }, 2000);
+        };
+
+        // Admin Actions
+        window.deleteProduct = async (id) => {
+            if(confirm("Delete product?")) {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
+                showToast("Product Deleted");
+            }
+        };
+
+        window.saveProduct = async (event) => {
+            event.preventDefault();
+            const form = event.target;
+            const data = {
+                title: form.title.value,
+                price: parseFloat(form.price.value),
+                category: form.category.value,
+                image: form.image.value,
+                description: form.description.value,
+                rating: 0,
+                reviews: 0
+            };
+
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), data);
+            showToast("Product Added");
+            form.reset();
+        };
+
+        // --- UI HELPERS ---
+        
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast px-6 py-3 rounded shadow-lg text-white font-medium mb-2 ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
+            toast.innerText = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function formatPrice(usd) {
+            return Math.floor(usd * 83).toLocaleString();
+        }
+
+        function renderStars(rating) {
+            let html = '<div class="flex text-amazon-yellow">';
+            for(let i=0; i<5; i++) {
+                if(i < Math.floor(rating)) html += '<i class="ph-fill ph-star"></i>';
+                else html += '<i class="ph ph-star text-gray-300"></i>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        // --- RENDER FUNCTIONS ---
+
+        function renderHeader() {
+            const cartCount = state.cart.reduce((a,c) => a + c.quantity, 0);
+            
+            // Search Logic
+            let filtered = state.products;
+            if(state.searchQuery) {
+                filtered = state.products.filter(p => 
+                    p.title.toLowerCase().includes(state.searchQuery.toLowerCase()) || 
+                    p.category.toLowerCase().includes(state.searchQuery.toLowerCase())
+                );
+            }
+
+            // Suggestions Dropdown
+            let suggestionsHTML = '';
+            if (state.showSuggestions && state.searchQuery) {
+                suggestionsHTML = `
+                <div class="absolute top-10 left-0 right-0 bg-white text-black border border-gray-200 shadow-lg z-50 max-h-60 overflow-y-auto rounded-b-md">
+                    ${filtered.length > 0 ? filtered.map(p => `
+                        <div onclick="selectSuggestion('${p.id}')" class="p-2 hover:bg-gray-100 cursor-pointer flex items-center gap-2 border-b border-gray-100">
+                            <i class="ph ph-magnifying-glass text-gray-400"></i>
+                            <span class="text-sm font-medium line-clamp-1">${p.title}</span>
+                        </div>
+                    `).join('') : '<div class="p-3 text-sm text-gray-500">No products found</div>'}
+                </div>`;
+            }
+
+            return `
+            <header class="bg-amazon-dark text-white sticky top-0 z-50">
+                <!-- Top Belt -->
+                <div class="flex items-center p-2 gap-4 max-w-[1500px] mx-auto">
+                    <!-- Logo -->
+                    <div onclick="setView('home')" class="cursor-pointer border border-transparent hover:border-white p-1 rounded flex flex-col leading-none">
+                        <span class="text-xl font-bold tracking-tighter">amazon<span class="text-amazon-yellow">.in</span></span>
+                    </div>
+
+                    <!-- Location -->
+                    <div class="hidden md:flex flex-col text-xs border border-transparent hover:border-white p-1 rounded cursor-pointer">
+                        <span class="text-gray-300">Deliver to</span>
+                        <span class="font-bold">India</span>
+                    </div>
+
+                    <!-- Search Bar -->
+                    <div class="flex-grow flex h-10 rounded overflow-hidden focus-within:ring-2 focus-within:ring-amazon-yellow relative">
+                        <select class="bg-gray-100 text-black text-xs p-2 border-r border-gray-300 w-14 hidden sm:block">
+                            <option>All</option>
+                        </select>
+                        <input 
+                            id="searchInput"
+                            type="text" 
+                            class="flex-grow p-2 text-black outline-none"
+                            placeholder="Search Amazon"
+                            value="${state.searchQuery}"
+                            oninput="updateSearch(this.value)"
+                            onfocus="updateSearch(this.value)"
+                        />
+                        <button class="bg-amazon-yellow hover:bg-amazon-orange p-2 px-4 text-gray-900">
+                            <i class="ph ph-magnifying-glass text-xl"></i>
+                        </button>
+                        ${suggestionsHTML}
+                    </div>
+
+                    <!-- Nav Links -->
+                    <div onclick="setView('orders')" class="hidden sm:flex flex-col text-xs border border-transparent hover:border-white p-1 rounded cursor-pointer">
+                        <span class="text-gray-300">Hello, ${state.user ? 'User' : 'Sign in'}</span>
+                        <span class="font-bold">Returns & Orders</span>
+                    </div>
+
+                    <div onclick="setView('admin')" class="hidden md:flex flex-col text-xs border border-transparent hover:border-white p-1 rounded cursor-pointer">
+                        <span class="text-gray-300">Admin</span>
+                        <span class="font-bold">Dashboard</span>
+                    </div>
+
+                    <!-- Cart -->
+                    <div onclick="setView('cart')" class="flex items-end cursor-pointer border border-transparent hover:border-white p-1 rounded relative">
+                        <i class="ph ph-shopping-cart text-3xl"></i>
+                        <span class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1 bg-amazon-yellow text-gray-900 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                            ${cartCount}
+                        </span>
+                        <span class="hidden sm:inline font-bold text-sm ml-1 mb-1">Cart</span>
+                    </div>
+                </div>
+                
+                <!-- Sub Header -->
+                <div class="bg-amazon-light text-white text-sm p-2 flex items-center gap-4 overflow-x-auto whitespace-nowrap">
+                    <div class="flex items-center gap-1 cursor-pointer font-bold">
+                        <i class="ph ph-list text-lg"></i> All
+                    </div>
+                    <span class="cursor-pointer hover:underline">Fresh</span>
+                    <span class="cursor-pointer hover:underline">Amazon miniTV</span>
+                    <span class="cursor-pointer hover:underline">Sell</span>
+                    <span class="cursor-pointer hover:underline">Best Sellers</span>
+                    <span class="cursor-pointer hover:underline">Mobiles</span>
+                    <span class="cursor-pointer hover:underline">Today's Deals</span>
+                    <span class="cursor-pointer hover:underline">Electronics</span>
+                </div>
+            </header>
+            `;
+        }
+
+        function renderHero() {
+            return `
+            <div class="relative w-full h-[200px] md:h-[350px] bg-gradient-to-b from-gray-200 to-gray-100 overflow-hidden">
+                <div class="absolute inset-0 flex items-center justify-center bg-gray-300">
+                    <img src="https://m.media-amazon.com/images/I/61lwJy4B8PL._SX3000_.jpg" class="object-cover w-full h-full opacity-90">
+                    <div class="absolute inset-0 bg-gradient-to-t from-gray-100 to-transparent bottom-0 h-1/3"></div>
+                </div>
+            </div>`;
+        }
+
+        function renderProductCard(p) {
+            return `
+            <div class="bg-white p-4 z-30 flex flex-col justify-between h-full hover:shadow-lg transition-shadow duration-200 border border-transparent hover:border-gray-200 rounded-sm">
+                <div onclick="window.selectSuggestion('${p.id}')" class="cursor-pointer">
+                    <div class="flex justify-center mb-4 h-48 items-center bg-gray-50 p-2">
+                        <img src="${p.image}" class="max-h-full max-w-full object-contain mix-blend-multiply" />
+                    </div>
+                    <h3 class="text-sm font-medium line-clamp-2 hover:text-orange-600 mb-1">${p.title}</h3>
+                    <div class="flex items-center mb-1 gap-1">
+                        ${renderStars(p.rating)}
+                        <span class="text-xs text-amazon-blue ml-1">${p.reviews}</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-xs align-top">₹</span>
+                        <span class="text-xl font-bold">${formatPrice(p.price)}</span>
+                        <span class="text-xs align-top">00</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-2">FREE Delivery by Amazon</p>
+                </div>
+                <button onclick="addToCart('${p.id}')" class="w-full bg-amazon-yellow hover:bg-amazon-orange border border-amazon-orange rounded-full py-1 text-sm font-medium shadow-sm active:scale-95 transition-transform">
+                    Add to Cart
+                </button>
+            </div>`;
+        }
+
+        function renderHome() {
+            let productsToShow = state.products;
+            if(state.searchQuery) {
+                productsToShow = state.products.filter(p => 
+                    p.title.toLowerCase().includes(state.searchQuery.toLowerCase()) || 
+                    p.category.toLowerCase().includes(state.searchQuery.toLowerCase())
+                );
+            }
+
+            return `
+            ${renderHero()}
+            <div class="max-w-[1500px] mx-auto px-4 -mt-16 relative z-10 mb-8 pb-10">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    ${productsToShow.map(p => renderProductCard(p)).join('')}
+                </div>
+                
+                <div class="bg-white p-8 text-center mt-8 border-t border-b shadow-sm">
+                    <div class="text-xs text-gray-500 mb-2">See personalized recommendations</div>
+                    <button class="bg-amazon-yellow border border-amazon-orange rounded px-20 py-1 text-sm font-bold shadow-sm">Sign in</button>
+                    <div class="text-xs mt-2">New customer? <span class="text-amazon-blue hover:underline cursor-pointer">Start here.</span></div>
+                </div>
+            </div>
+            `;
+        }
+
+        function renderProductDetails() {
+            const p = state.selectedProduct;
+            if(!p) return '<div class="p-8">Product Not Found</div>';
+
+            return `
+            <div class="bg-white p-4 md:p-8 max-w-[1500px] mx-auto min-h-screen">
+                <button onclick="setView('home')" class="mb-4 text-amazon-blue hover:underline text-sm">Back to results</button>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-8">
+                    <!-- Image -->
+                    <div class="md:col-span-2 flex justify-center sticky top-24 h-fit">
+                        <img src="${p.image}" class="max-h-[400px] object-contain">
+                    </div>
+                    <!-- Details -->
+                    <div class="md:col-span-2">
+                        <h1 class="text-2xl font-medium mb-2">${p.title}</h1>
+                        <div class="flex items-center gap-2 mb-2 text-sm">
+                            ${renderStars(p.rating)}
+                            <span class="text-amazon-blue hover:underline">${p.reviews} ratings</span>
+                        </div>
+                        <div class="border-t border-b py-2 my-2 border-gray-200">
+                            <span class="bg-gray-800 text-white text-xs px-2 py-1 rounded">Amazon's Choice</span>
+                        </div>
+                        <div class="my-4">
+                            <span class="text-red-700 text-xl font-light">-15% </span>
+                            <span class="text-3xl font-bold">₹${formatPrice(p.price)}</span>
+                            <div class="text-gray-500 text-sm">M.R.P.: <span class="line-through">₹${formatPrice(p.price * 1.15)}</span></div>
+                        </div>
+                        <div class="text-sm space-y-2 mb-6">
+                            <p><strong>Brand:</strong> Generic</p>
+                            <p><strong>Category:</strong> ${p.category}</p>
+                            <p class="leading-relaxed">${p.description}</p>
+                        </div>
+                    </div>
+                    <!-- Buy Box -->
+                    <div class="md:col-span-1">
+                        <div class="border border-gray-300 rounded-lg p-4 shadow-sm">
+                            <h3 class="text-xl font-bold text-red-700 mb-2">₹${formatPrice(p.price)}</h3>
+                            <p class="text-sm text-amazon-blue mb-4">FREE delivery <span class="font-bold text-black">Tomorrow</span></p>
+                            <p class="text-lg text-green-700 font-medium mb-4">In Stock</p>
+                            <button onclick="addToCart('${p.id}')" class="w-full bg-amazon-yellow hover:bg-amazon-orange rounded-full py-2 mb-2 shadow-sm font-medium">Add to Cart</button>
+                            <button onclick="addToCart('${p.id}'); setView('cart')" class="w-full bg-amazon-orange hover:bg-[#b8813b] rounded-full py-2 shadow-sm font-medium">Buy Now</button>
+                            <div class="mt-4 text-xs text-gray-600 space-y-1">
+                                <div class="flex gap-2"><span>Ships from</span> <span>Amazon</span></div>
+                                <div class="flex gap-2"><span>Sold by</span> <span>Appario Retail</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderCart() {
+            if (state.cart.length === 0) {
+                return `
+                <div class="bg-white p-8 max-w-[1500px] mx-auto my-4 shadow-sm min-h-[50vh] flex flex-col items-center justify-center">
+                    <h2 class="text-2xl font-bold mb-4">Your Amazon Cart is empty.</h2>
+                    <button onclick="setView('home')" class="text-amazon-blue hover:underline">Shop today's deals</button>
+                </div>`;
+            }
+
+            const subtotal = state.cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+            const totalINR = formatPrice(subtotal);
+            const count = state.cart.reduce((a, c) => a + c.quantity, 0);
+
+            return `
+            <div class="p-4 bg-gray-100 min-h-screen">
+                <div class="max-w-[1500px] mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    <!-- Cart Items -->
+                    <div class="lg:col-span-3 bg-white p-6 shadow-sm">
+                        <h2 class="text-2xl font-medium border-b pb-4 mb-4">Shopping Cart</h2>
+                        ${state.cart.map(item => `
+                            <div class="flex flex-col sm:flex-row gap-4 border-b py-6 last:border-0">
+                                <div class="w-full sm:w-48 flex justify-center">
+                                    <img src="${item.image}" class="max-h-32 object-contain" />
+                                </div>
+                                <div class="flex-grow">
+                                    <div class="flex justify-between">
+                                        <h3 class="text-lg font-medium line-clamp-2 hover:text-orange-600 hover:underline cursor-pointer">${item.title}</h3>
+                                        <span class="font-bold text-lg">₹${formatPrice(item.price)}</span>
+                                    </div>
+                                    <div class="text-green-700 text-sm mb-2">In Stock</div>
+                                    <div class="text-xs text-gray-500 mb-2">Eligible for FREE Shipping</div>
+                                    <div class="flex items-center gap-4 mt-2">
+                                        <div class="flex items-center border rounded shadow-sm">
+                                            <button onclick="updateQty('${item.id}', ${item.quantity - 1})" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 border-r">-</button>
+                                            <span class="px-4 py-1 font-medium">${item.quantity}</span>
+                                            <button onclick="updateQty('${item.id}', ${item.quantity + 1})" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 border-l">+</button>
+                                        </div>
+                                        <span class="text-gray-300">|</span>
+                                        <button onclick="removeFromCart('${item.id}')" class="text-amazon-blue text-sm hover:underline">Delete</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                        <div class="text-right text-lg mt-4">
+                            Subtotal (${count} items): <span class="font-bold">₹${totalINR}</span>
+                        </div>
+                    </div>
+                    <!-- Sidebar -->
+                    <div class="lg:col-span-1 h-fit">
+                        <div class="bg-white p-6 shadow-sm">
+                            <div class="text-lg mb-4">
+                                Subtotal (${count} items): <span class="font-bold">₹${totalINR}</span>
+                            </div>
+                            <button onclick="setView('checkout')" class="w-full bg-amazon-yellow hover:bg-amazon-orange rounded-lg py-2 shadow-sm font-medium">Proceed to Buy</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderCheckout() {
+             const subtotal = state.cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+             const totalINR = formatPrice(subtotal);
+
+            return `
+            <div class="max-w-[1000px] mx-auto p-4 md:p-8 bg-white min-h-screen">
+                <div class="flex items-center justify-between border-b pb-4 mb-6">
+                    <h1 class="text-2xl font-medium">Checkout</h1>
+                    <i class="ph ph-lock text-gray-400 text-2xl"></i>
+                </div>
+                <div class="flex flex-col gap-4">
+                    <!-- Address -->
+                    <div class="border border-gray-200 rounded p-4 bg-gray-50">
+                        <h3 class="font-bold text-gray-700 mb-2">1. Delivery Address</h3>
+                        <p class="text-sm">John Doe<br>123, Tech Park, Hitech City<br>Hyderabad, Telangana</p>
+                    </div>
+                    <!-- Payment -->
+                    <div class="border border-amazon-orange rounded p-4 bg-gray-50">
+                        <h3 class="font-bold text-amazon-orange mb-4">2. Payment Method</h3>
+                        <div class="border border-amazon-orange bg-orange-50 p-4 rounded mb-4">
+                            <div class="flex items-center gap-2 mb-2 font-bold text-gray-700">
+                                <i class="ph ph-credit-card"></i> Credit / Debit Card
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 max-w-md">
+                                <input type="text" placeholder="XXXX XXXX XXXX XXXX" class="border p-2 rounded bg-white w-full col-span-2" disabled>
+                                <input type="text" placeholder="MM/YY" class="border p-2 rounded bg-white w-full" disabled>
+                                <input type="text" placeholder="CVV" class="border p-2 rounded bg-white w-full" disabled>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">* Mock Payment</p>
+                        </div>
+                        <div class="border-t pt-4">
+                            <div class="flex justify-between text-lg font-bold mb-4 max-w-md">
+                                <span>Order Total:</span>
+                                <span class="text-red-700">₹${totalINR}</span>
+                            </div>
+                            <button id="checkoutBtn" onclick="placeOrder()" class="bg-amazon-yellow hover:bg-amazon-orange px-8 py-2 rounded shadow-sm font-medium">Place your order</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderOrders() {
+             // We need to fetch orders first, but for simplicity we rely on a separate fetch or just assume data is synced.
+             // Since we didn't add order sync to global init, we will do a quick fetch here or just show placeholder if complexity grows.
+             // For single file simplicity, let's assume we want to show a simple "Fetch" UI or just listen to orders if user is logged in.
+             // Adding Order Sync to initApp is better. For now, let's just fetch once.
+             
+             // Quick fetch for display
+             getDocs(collection(db, 'artifacts', appId, 'users', state.user.uid, 'orders')).then(snap => {
+                 const orders = snap.docs.map(d => ({id:d.id, ...d.data()}));
+                 const container = document.getElementById('orders-list');
+                 if(!container) return;
+
+                 if(orders.length === 0) {
+                     container.innerHTML = '<p>No orders yet.</p>';
+                     return;
+                 }
+
+                 container.innerHTML = orders.map(order => `
+                    <div class="border border-gray-300 rounded overflow-hidden mb-4">
+                        <div class="bg-gray-100 p-4 flex justify-between text-sm text-gray-600 border-b border-gray-200">
+                            <div><span class="block text-xs uppercase">Placed</span>${new Date(order.date).toLocaleDateString()}</div>
+                            <div><span class="block text-xs uppercase">Total</span>₹${order.amount}</div>
+                            <div><span class="block text-xs uppercase">ID</span>#${order.id.slice(0,8)}</div>
+                        </div>
+                        <div class="p-4 bg-white">
+                            <h3 class="font-bold text-lg mb-2 text-green-700">Arriving Tomorrow</h3>
+                            ${order.items.map(i => `
+                                <div class="flex gap-4 mb-2">
+                                    <img src="${i.image}" class="w-12 h-12 object-contain">
+                                    <div><div class="font-medium text-amazon-blue">${i.title}</div><div class="text-xs">Qty: ${i.quantity}</div></div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                 `).join('');
+             });
+
+             return `
+             <div class="max-w-[1000px] mx-auto p-4 min-h-screen bg-white">
+                <h1 class="text-2xl font-medium mb-6">Your Orders</h1>
+                <div id="orders-list">Loading...</div>
+             </div>`;
+        }
+
+        function renderAdmin() {
+            return `
+            <div class="max-w-[1500px] mx-auto p-6 bg-gray-50 min-h-screen">
+                <h1 class="text-3xl font-bold mb-8">Seller Dashboard</h1>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <!-- Form -->
+                    <div class="bg-white p-6 rounded shadow-sm h-fit">
+                        <h2 class="text-xl font-bold mb-4">Add New Product</h2>
+                        <form onsubmit="saveProduct(event)" class="space-y-4">
+                            <input name="title" class="w-full border p-2 rounded" placeholder="Product Title" required>
+                            <input name="price" class="w-full border p-2 rounded" placeholder="Price (USD)" type="number" step="0.01" required>
+                            <input name="category" class="w-full border p-2 rounded" placeholder="Category" required>
+                            <input name="image" class="w-full border p-2 rounded" placeholder="Image URL" required>
+                            <textarea name="description" class="w-full border p-2 rounded" placeholder="Description"></textarea>
+                            <button type="submit" class="w-full bg-amazon-blue text-white py-2 rounded hover:opacity-90">Add Product</button>
+                        </form>
+                    </div>
+                    <!-- List -->
+                    <div class="md:col-span-2 space-y-4">
+                        <h2 class="text-xl font-bold">Inventory (${state.products.length})</h2>
+                        ${state.products.map(p => `
+                            <div class="bg-white p-4 rounded shadow-sm flex justify-between items-center">
+                                <div class="flex gap-4 items-center">
+                                    <img src="${p.image}" class="w-12 h-12 object-contain">
+                                    <div>
+                                        <h3 class="font-medium line-clamp-1">${p.title}</h3>
+                                        <p class="text-sm text-gray-500">₹${formatPrice(p.price)}</p>
+                                    </div>
+                                </div>
+                                <button onclick="deleteProduct('${p.id}')" class="p-2 text-red-600 hover:bg-red-50 rounded"><i class="ph ph-trash"></i></button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderFooter() {
+            return `
+            <footer class="bg-amazon-light text-white mt-auto">
+                <div onclick="window.scrollTo(0,0)" class="bg-[#37475a] py-4 text-center text-sm hover:opacity-90 cursor-pointer">Back to top</div>
+                <div class="max-w-[1000px] mx-auto py-12 grid grid-cols-2 md:grid-cols-4 gap-8 px-4 text-sm text-gray-300">
+                    <div>
+                        <h4 class="font-bold text-white mb-2">Get to Know Us</h4>
+                        <ul class="space-y-1"><li>About Us</li><li>Careers</li><li>Press Releases</li></ul>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-white mb-2">Connect with Us</h4>
+                        <ul class="space-y-1"><li>Facebook</li><li>Twitter</li><li>Instagram</li></ul>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-white mb-2">Make Money</h4>
+                        <ul class="space-y-1"><li>Sell on Amazon</li><li>Accelerator</li><li>Global Selling</li></ul>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-white mb-2">Let Us Help You</h4>
+                        <ul class="space-y-1"><li>COVID-19</li><li>Your Account</li><li>Returns</li></ul>
+                    </div>
+                </div>
+                <div class="border-t border-gray-600 py-8 text-center text-xs text-gray-400 bg-amazon-dark">
+                    © 1996-2024, Amazon.com, Inc. or its affiliates
+                </div>
+            </footer>`;
+        }
+
+        // --- MAIN RENDER LOOP ---
+        function render() {
+            const appDiv = document.getElementById('app');
+            
+            if(state.loading) {
+                appDiv.innerHTML = '<div class="h-screen flex items-center justify-center bg-gray-100"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div></div>';
+                return;
+            }
+
+            let content = '';
+            
+            // Header is always present
+            content += renderHeader();
+
+            // Body based on View
+            switch(state.view) {
+                case 'home': content += renderHome(); break;
+                case 'product': content += renderProductDetails(); break;
+                case 'cart': content += renderCart(); break;
+                case 'checkout': content += renderCheckout(); break;
+                case 'orders': content += renderOrders(); break;
+                case 'admin': content += renderAdmin(); break;
+                default: content += renderHome();
+            }
+
+            content += renderFooter();
+            appDiv.innerHTML = content;
+        }
+
+        // Start
+        initApp();
+
+    </script>
+</body>
+  </html>
