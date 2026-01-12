@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Amazon.in Clone</title>
+    <title>Mawa Shop</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -314,7 +314,7 @@
             return `
             <div class="min-h-screen bg-white flex flex-col items-center justify-center p-4">
                 <div class="mb-8">
-                    <span class="text-4xl font-bold tracking-tighter">amazon<span class="text-amazon-orange">.in</span></span>
+                    <span class="text-4xl font-bold tracking-tighter">Mawa<span class="text-amazon-orange">Shop</span></span>
                 </div>
                 
                 <div class="w-full max-w-sm border border-gray-300 rounded-lg p-8 shadow-sm">
@@ -322,7 +322,7 @@
                     
                     <div id="login-error" class="hidden bg-red-50 border border-red-400 text-red-600 p-3 rounded mb-4 text-sm"></div>
 
-                    <p class="text-sm mb-4 text-gray-700">Login with your Google account to access Amazon Clone.</p>
+                    <p class="text-sm mb-4 text-gray-700">Login with your Google account to access Mawa Shop.</p>
 
                     <button onclick="loginWithGoogle()" class="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-medium py-2 px-4 rounded shadow-sm flex items-center justify-center gap-3 transition-all">
                         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5" alt="Google">
@@ -330,7 +330,7 @@
                     </button>
                     
                     <div class="mt-6 text-xs text-gray-600 leading-5">
-                        By continuing, you agree to Amazon's <span class="text-blue-700 hover:underline cursor-pointer">Conditions of Use</span> and <span class="text-blue-700 hover:underline cursor-pointer">Privacy Notice</span>.
+                        By continuing, you agree to Mawa Shop's <span class="text-blue-700 hover:underline cursor-pointer">Conditions of Use</span> and <span class="text-blue-700 hover:underline cursor-pointer">Privacy Notice</span>.
                     </div>
                 </div>
 
@@ -340,7 +340,7 @@
                         <span class="hover:underline cursor-pointer">Privacy Notice</span>
                         <span class="hover:underline cursor-pointer">Help</span>
                     </div>
-                    <p>© 1996-2024, Amazon.com, Inc. or its affiliates</p>
+                    <p>© 2024, Mawa Shop, Inc. or its affiliates</p>
                 </div>
             </div>`;
         }
@@ -367,14 +367,14 @@
             <header class="bg-amazon-dark text-white sticky top-0 z-50">
                 <div class="flex items-center p-2 gap-4 max-w-[1500px] mx-auto">
                     <div onclick="setView('home')" class="cursor-pointer border border-transparent hover:border-white p-1 rounded flex flex-col leading-none">
-                        <span class="text-xl font-bold tracking-tighter">amazon<span class="text-amazon-yellow">.in</span></span>
+                        <span class="text-xl font-bold tracking-tighter">Mawa<span class="text-amazon-yellow">Shop</span></span>
                     </div>
                     <div class="hidden md:flex flex-col text-xs border border-transparent hover:border-white p-1 rounded cursor-pointer">
                         <span class="text-gray-300">Deliver to</span> <span class="font-bold">India</span>
                     </div>
                     <div class="flex-grow flex h-10 rounded overflow-hidden focus-within:ring-2 focus-within:ring-amazon-yellow relative">
                         <select class="bg-gray-100 text-black text-xs p-2 border-r border-gray-300 w-14 hidden sm:block"><option>All</option></select>
-                        <input id="searchInput" type="text" class="flex-grow p-2 text-black outline-none" placeholder="Search Amazon" value="${state.searchQuery}" oninput="updateSearch(this.value)" onfocus="updateSearch(this.value)"/>
+                        <input id="searchInput" type="text" class="flex-grow p-2 text-black outline-none" placeholder="Search Mawa Shop" value="${state.searchQuery}" oninput="updateSearch(this.value)" onfocus="updateSearch(this.value)"/>
                         <button class="bg-amazon-yellow hover:bg-amazon-orange p-2 px-4 text-gray-900"><i class="ph ph-magnifying-glass text-xl"></i></button>
                         ${suggestionsHTML}
                     </div>
@@ -396,7 +396,7 @@
                 </div>
                 <div class="bg-amazon-light text-white text-sm p-2 flex items-center gap-4 overflow-x-auto whitespace-nowrap">
                     <div class="flex items-center gap-1 cursor-pointer font-bold"><i class="ph ph-list text-lg"></i> All</div>
-                    <span class="cursor-pointer hover:underline">Fresh</span> <span class="cursor-pointer hover:underline">Amazon miniTV</span> <span class="cursor-pointer hover:underline">Sell</span> <span class="cursor-pointer hover:underline">Best Sellers</span> <span class="cursor-pointer hover:underline">Electronics</span>
+                    <span class="cursor-pointer hover:underline">Fresh</span> <span class="cursor-pointer hover:underline">Mawa miniTV</span> <span class="cursor-pointer hover:underline">Sell</span> <span class="cursor-pointer hover:underline">Best Sellers</span> <span class="cursor-pointer hover:underline">Electronics</span>
                 </div>
             </header>`;
         }
@@ -421,7 +421,7 @@
                     <h3 class="text-sm font-medium line-clamp-2 hover:text-orange-600 mb-1">${p.title}</h3>
                     <div class="flex items-center mb-1 gap-1">${renderStars(p.rating)} <span class="text-xs text-amazon-blue ml-1">${p.reviews}</span></div>
                     <div class="mb-2"><span class="text-xs align-top">₹</span><span class="text-xl font-bold">${formatPrice(p.price)}</span></div>
-                    <p class="text-xs text-gray-500 mb-2">FREE Delivery by Amazon</p>
+                    <p class="text-xs text-gray-500 mb-2">FREE Delivery by Mawa Shop</p>
                 </div>
                 <button onclick="addToCart('${p.id}')" class="w-full bg-amazon-yellow hover:bg-amazon-orange border border-amazon-orange rounded-full py-1 text-sm font-medium shadow-sm active:scale-95 transition-transform">Add to Cart</button>
             </div>`;
@@ -454,12 +454,14 @@
                         <div class="flex items-center gap-2 mb-2 text-sm">${renderStars(p.rating)} <span class="text-amazon-blue hover:underline">${p.reviews} ratings</span></div>
                         <div class="my-4"><span class="text-red-700 text-xl font-light">-15% </span><span class="text-3xl font-bold">₹${formatPrice(p.price)}</span></div>
                         <div class="text-sm space-y-2 mb-6"><p><strong>Category:</strong> ${p.category}</p><p class="leading-relaxed">${p.description}</p></div>
+                        <div class="border-t border-b py-2 my-2 border-gray-200"><span class="bg-gray-800 text-white text-xs px-2 py-1 rounded">Mawa's Choice</span></div>
                     </div>
                     <div class="md:col-span-1">
                         <div class="border border-gray-300 rounded-lg p-4 shadow-sm">
                             <h3 class="text-xl font-bold text-red-700 mb-2">₹${formatPrice(p.price)}</h3>
                             <button onclick="addToCart('${p.id}')" class="w-full bg-amazon-yellow hover:bg-amazon-orange rounded-full py-2 mb-2 shadow-sm font-medium">Add to Cart</button>
                             <button onclick="addToCart('${p.id}'); setView('cart')" class="w-full bg-amazon-orange hover:bg-[#b8813b] rounded-full py-2 shadow-sm font-medium">Buy Now</button>
+                            <div class="mt-4 text-xs text-gray-600 space-y-1"><div class="flex gap-2"><span>Ships from</span> <span>Mawa Shop</span></div></div>
                         </div>
                     </div>
                 </div>
@@ -467,7 +469,7 @@
         }
 
         function renderCart() {
-            if (state.cart.length === 0) return `<div class="bg-white p-8 max-w-[1500px] mx-auto my-4 shadow-sm min-h-[50vh] flex flex-col items-center justify-center"><h2 class="text-2xl font-bold mb-4">Your Amazon Cart is empty.</h2><button onclick="setView('home')" class="text-amazon-blue hover:underline">Shop today's deals</button></div>`;
+            if (state.cart.length === 0) return `<div class="bg-white p-8 max-w-[1500px] mx-auto my-4 shadow-sm min-h-[50vh] flex flex-col items-center justify-center"><h2 class="text-2xl font-bold mb-4">Your Mawa Shop Cart is empty.</h2><button onclick="setView('home')" class="text-amazon-blue hover:underline">Shop today's deals</button></div>`;
             const subtotal = state.cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
             return `
             <div class="p-4 bg-gray-100 min-h-screen">
@@ -559,7 +561,7 @@
         }
 
         function renderFooter() {
-            return `<footer class="bg-amazon-light text-white mt-auto"><div onclick="window.scrollTo(0,0)" class="bg-[#37475a] py-4 text-center text-sm hover:opacity-90 cursor-pointer">Back to top</div><div class="border-t border-gray-600 py-8 text-center text-xs text-gray-400 bg-amazon-dark">© 1996-2024, Amazon.com, Inc. or its affiliates</div></footer>`;
+            return `<footer class="bg-amazon-light text-white mt-auto"><div onclick="window.scrollTo(0,0)" class="bg-[#37475a] py-4 text-center text-sm hover:opacity-90 cursor-pointer">Back to top</div><div class="border-t border-gray-600 py-8 text-center text-xs text-gray-400 bg-amazon-dark">© 2024, Mawa Shop, Inc. or its affiliates</div></footer>`;
         }
 
         function render() {
@@ -592,4 +594,4 @@
         initApp();
     </script>
 </body>
-</html>
+    </html>
